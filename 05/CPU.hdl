@@ -1,0 +1,123 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/05/CPU.hdl
+
+/**
+ * The Hack CPU (Central Processing unit), consisting of an ALU,
+ * two registers named A and D, and a program counter named PC.
+ * The CPU is designed to fetch and execute instructions written in 
+ * the Hack machine language. In particular, functions as follows:
+ * Executes the inputted instruction according to the Hack machine 
+ * language specification. The D and A in the language specification
+ * refer to CPU-resident registers, while M refers to the external
+ * memory location addressed by A, i.e. to Memory[A]. The inM input 
+ * holds the value of this location. If the current instruction needs 
+ * to write a value to M, the value is placed in outM, the address 
+ * of the target location is placed in the addressM output, and the 
+ * writeM control bit is asserted. (When writeM==0, any value may 
+ * appear in outM). The outM and writeM outputs are combinational: 
+ * they are affected instantaneously by the execution of the current 
+ * instruction. The addressM and pc outputs are clocked: although they 
+ * are affected by the execution of the current instruction, they commit 
+ * to their new values only in the next time step. If reset==1 then the 
+ * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather 
+ * than to the address resulting from executing the current instruction. 
+ */
+
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    // Put your code here:
+
+
+	//CONTROL UNIT
+	
+	Mux16(a = instruction, b= outALU, sel = instruction[15], out = Avalue);
+	Mux(a = true, b = false , sel = instruction[15], out = lA1);
+	Mux(a = false, b= true, sel = instruction[5], out = lA2);
+	Or(a = lA1, b = lA2, out = LoadA);
+	Mux(a = false, b= true, sel = instruction[4], out = loadd);
+	And(a = instruction[15], b = loadd, out = LoadD);	//check for C instruction type
+	
+
+	//REGISTERS
+
+	//addressM is always going to be output of address register
+	ARegister( in = Avalue, load = LoadA, out = Aout, out[0..14]=addressM);
+	DRegister( in = outALU, load = LoadD, out = Dout);
+	//Program counter
+	PC(in = Aout , load = jumpresult, inc = true, reset = reset, out = PCout,out[0..14]=pc);
+	
+	
+	//Based on jump bits and ALU output we must select next instruction to be set on the PC
+	
+	//JGT
+	Or(a = outALUzero, b= outALUneg, out = out1);
+	Not(in = out1, out = notout1);	//notout1 should be 1
+	And( a = notout1, b= instruction[0], out = jumpres1);	//condition for greater than jump	
+
+	//JEQ
+	And(a= outALUzero, b = instruction[1], out = jumpres2);
+
+	//JGE
+	And( a = instruction[0], b= instruction[1] , out = insjge);
+	Or(a = jumpres1, b = jumpres2 , out = j1orj2);
+	And(a = insjge, b = j1orj2, out = jumpres3);
+	
+	//JLT
+	And( a= instruction[2], b= outALUneg , out = jumpres4);
+	
+	//JNE
+	And(a = instruction[0], b = instruction[2], out = insjne);
+	Not(in = outALUzero, out = notoutALUzero);
+	And(a = insjne,  b= notoutALUzero , out = jumpres5);
+	
+	//JLE
+	And(a = instruction[1], b =instruction[2], out = insjle);
+	And(a = outALUzero, b= outALUneg, out = lesel);
+	And(a = insjle, b= lesel, out = jumpres6);
+	
+	//JMP
+	And(a = instruction[0] , b = instruction[1] , out = jump1);
+	And(a = jump1, b= instruction[2], out= jumpres7);
+	
+	Or( a = jumpres1, b = jumpres2, out = j1);
+	Or( a = j1, b = jumpres3, out = j2);
+	Or( a = j2, b = jumpres4, out = j3);
+	Or( a = j3, b = jumpres5, out = j4);
+	Or( a = j4, b = jumpres6, out = j5);
+	Or( a = j5, b = jumpres7, out = jumpres);
+
+	And(a = instruction[15], b = jumpres, out = jumpresult);	//check for C instruction type
+	
+		
+	//If C instruction than whether to select in->instruction or in->inM	
+	//A or M
+	Mux( a = false, b = true, sel = instruction[12], out = AMsel);
+	And( a= AMsel , b= instruction[15], out = AMselr);
+
+	Mux16(a = Aout, b = inM, sel = AMselr, out = AMvalue);
+	
+	Mux(a = false, b = true, sel = instruction[3], out = wBit);
+	And(a = wBit, b= instruction[15], out = writeM);
+
+
+	//ARITHMETIC AND LOGIC UNIT	
+	ALU(x = Dout, y = AMvalue, zx = instruction[11], nx = instruction[10], zy = instruction[9], ny = instruction[8], f = instruction[7], no = instruction[6], out = outALU,out = outM, zr = outALUzero, ng = outALUneg);	
+
+}
+
+
+

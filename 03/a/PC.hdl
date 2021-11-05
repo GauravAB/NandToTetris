@@ -1,0 +1,51 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/03/a/PC.hdl
+
+/**
+ * A 16-bit counter with load and reset control bits.
+ * if      (reset[t] == 1) out[t+1] = 0
+ * else if (load[t] == 1)  out[t+1] = in[t]
+ * else if (inc[t] == 1)   out[t+1] = out[t] + 1  (integer addition)
+ * else                    out[t+1] = out[t]
+ */
+
+CHIP PC {
+    IN in[16],load,inc,reset;
+    OUT out[16];
+
+    PARTS:
+    // Put your code here:
+	//select output based on load bit	
+	Mux16(a = result,b = in, sel = load, out = out1);
+	Mux(a = false, b= true, sel = load, out = loadop); 
+
+	//TODO : optimize
+	//mandatory increment 			
+	Inc16(in = out1, out = incregout);
+
+	//if load on then don't increment, else increment
+	Mux(a = inc, b= false, sel = load, out = inc1);
+	
+	//if increment bit on than output with increment
+	Mux16(a= out1, b = incregout, sel = inc1, out = out2);
+	
+	Mux(a = false, b= true , sel = inc1, out = loadop1);
+
+	//load  result output if either inc bit on or load bit on
+	Or(a = loadop1, b = loadop, out = loadop2);
+	
+	//16 bit false values
+	And16(a = out2, b = false, out = out3);
+	//if reset than output zero
+	Mux16(a = out2, b = out3, sel = reset, out = bitset);
+	Mux(a = false, b= true, sel = reset, out = loadop3);
+	//create a final load based on inc, load and reset operations
+	Or(a = loadop2, b= loadop3, out = resultload);
+	
+	//finally fill in the register based on the logical operations done above
+	Register(in = bitset, load = resultload, out = result, out = out);	
+
+}
+
